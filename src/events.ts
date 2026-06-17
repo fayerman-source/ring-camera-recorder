@@ -50,7 +50,11 @@ export function watchCamera(camera: RingCamera, cfg: AppConfig, recordFn: Record
     state.recording = true;
     state.lastStartMs = now;
     log.info(`Trigger: ${reason} on "${camera.name}".`);
-    recordFn(camera, cfg, cfg.clipLengthSeconds)
+    // Wrap in Promise.resolve().then(...) so a *synchronous* throw in recordFn
+    // still becomes a rejection (caught below) and can never leave state.recording
+    // stuck at true, which would permanently block this camera.
+    Promise.resolve()
+      .then(() => recordFn(camera, cfg, cfg.clipLengthSeconds))
       .catch((err) => log.error(`Recording failed for "${camera.name}": ${(err as Error).message}`))
       .finally(() => {
         state.recording = false;

@@ -54,8 +54,16 @@ export async function recordClip(
   // Open a live WebRTC call and transcode to a fragmented MP4 (see clipOutputArgs).
   // The call resolves via onCallEnded when ffmpeg exits (duration reached). A hung
   // call would otherwise hang forever, so cap the wait with a generous margin.
+  const startTimeoutMs = 30_000;
   const hardTimeoutMs = (seconds + 30) * 1000;
-  const session = await camera.streamVideo({ output: clipOutputArgs(seconds, outPath) });
+  // Cap the call setup too: streamVideo() performs WebRTC signaling that can hang
+  // on flaky networks or the unofficial API, and the onCallEnded timeout below
+  // only starts counting once the session object exists.
+  const session = await withTimeout(
+    camera.streamVideo({ output: clipOutputArgs(seconds, outPath) }),
+    startTimeoutMs,
+    `live stream for "${camera.name}" did not start within ${startTimeoutMs / 1000}s`,
+  );
   try {
     await withTimeout(
       firstValueFrom(session.onCallEnded),
