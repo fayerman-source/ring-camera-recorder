@@ -1,0 +1,34 @@
+# systemd unit for Ring Camera Recorder.
+#
+# Install:
+#   1. Build first:        npm install && npm run build
+#   2. Edit User/paths below to match your machine.
+#   3. sudo cp deploy/ring-camera-recorder.service /etc/systemd/system/
+#   4. sudo systemctl daemon-reload
+#   5. sudo systemctl enable --now ring-camera-recorder
+#   6. journalctl -u ring-camera-recorder -f      # follow logs
+#
+# Note: run `npm run auth` MANUALLY once (it is interactive) before enabling the
+# service. The service only reads the already-saved refresh token.
+
+[Unit]
+Description=Ring Camera Recorder (local live recording)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Replace with the unprivileged user and the absolute path where you cloned this repo.
+User=youruser
+WorkingDirectory=/home/youruser/ring-camera-recorder
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=10
+# Token rotation writes back to the token file, so the working dir must be writable.
+# Environment overrides (optional) — these win over config.json:
+# Environment=RING_OUTPUT_DIR=/var/lib/ring-recordings
+# Environment=RING_RETENTION_DAYS=14
+# Environment=RING_DEBUG=1
+
+[Install]
+WantedBy=multi-user.target

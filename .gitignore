@@ -1,0 +1,15 @@
+node_modules/
+dist/
+recordings/
+*.log
+
+# Raw image-generator output (the finished hero lives in assets/).
+nanobanana-output/
+
+# Secrets — the refresh token grants full account access. Never commit it.
+.ring-token.json
+.env
+config.local.json
+
+# Stray image-generator outputs in assets (keep only curated hero.jpg)
+assets/*.png

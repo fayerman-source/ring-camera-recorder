@@ -1,0 +1,36 @@
+Ring Local Recorder
+Copyright (c) 2026 Eli Fayerman
+Licensed under the MIT License (see LICENSE).
+
+================================================================================
+NOT AFFILIATED WITH RING
+================================================================================
+
+This project is an independent, community-built tool. It is NOT affiliated with,
+authorized, maintained, sponsored, or endorsed by Ring LLC, Amazon.com, Inc., or
+any of their subsidiaries or affiliates. "Ring" and related marks are trademarks
+of their respective owners and are used here only for identification purposes.
+
+================================================================================
+THIRD-PARTY COMPONENTS
+================================================================================
+
+This software depends on, but does not redistribute, the following packages.
+They are installed from the npm registry at install time under their own
+licenses:
+
+  - ring-client-api (MIT): https://github.com/dgreif/ring
+      Provides the Ring account/streaming integration. Uses Ring's unofficial
+      API; see the legal notes in README.md.
+  - rxjs (Apache-2.0)
+  - werift (MIT): WebRTC transport
+  - @homebridge/camera-utils (MIT)
+  - @eneris/push-receiver (MIT): push notification delivery
+
+ffmpeg:
+  Recording relies on ffmpeg. By default the binary is provided at install time
+  by the "ffmpeg-for-homebridge" package; alternatively you may point the tool at
+  a system ffmpeg via the RING_FFMPEG environment variable. ffmpeg is licensed
+  under the LGPL/GPL depending on how it was built. This project does NOT bundle
+  or redistribute any ffmpeg binary; it invokes whatever ffmpeg is present on
+  the host. See https://ffmpeg.org/legal.html.

@@ -1,0 +1,11 @@
+{
+  "tokenPath": ".ring-token.json",
+  "outputDir": "recordings",
+  "clipLengthSeconds": 30,
+  "cameras": "all",
+  "recordOnMotion": true,
+  "recordOnDing": true,
+  "motionCooldownSeconds": 20,
+  "retentionDays": 14,
+  "retentionSweepMinutes": 60
+}
