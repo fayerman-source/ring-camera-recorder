@@ -49,21 +49,23 @@ function spy() {
   const cam = fakeCamera(false); const s = spy();
   watchCamera(cam, cfg(), s.fn);
   cam.onMotionDetected.next(false); await tick();
-  ok(s.calls.length === 0, 'motion=false does not trigger (rising-edge only)');
+  ok(s.calls.length === 0, 'motion=false does not trigger');
   cam.onMotionDetected.next(true); await tick();
-  ok(s.calls.length === 1 && s.calls[0].seconds === 10, 'motion=true records one clip at configured length');
+  ok(s.calls.length === 1 && s.calls[0].seconds === 10, 'rising edge (false->true) records one clip');
   cam.onMotionDetected.next(true); await tick();
-  ok(s.calls.length === 1, 'second motion while recording is skipped (no overlap)');
+  ok(s.calls.length === 1, 'sustained true (no new rising edge) does not re-trigger');
   s.finish(); await tick();
+  cam.onMotionDetected.next(false); await tick();
   cam.onMotionDetected.next(true); await tick();
-  ok(s.calls.length === 2, 'after finish (cooldown 0) motion triggers again');
+  ok(s.calls.length === 2, 'a new rising edge after motion ends triggers again');
 }
 {
   const cam = fakeCamera(false); const s = spy();
   watchCamera(cam, cfg({ motionCooldownSeconds: 3600 }), s.fn);
   cam.onMotionDetected.next(true); await tick(); s.finish(); await tick();
+  cam.onMotionDetected.next(false); await tick();
   cam.onMotionDetected.next(true); await tick();
-  ok(s.calls.length === 1, 'second motion within cooldown is skipped');
+  ok(s.calls.length === 1, 'new rising edge within cooldown is skipped');
 }
 {
   const cam = fakeCamera(true); const s = spy();

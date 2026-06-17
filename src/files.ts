@@ -1,5 +1,6 @@
 import { mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+import { log } from './log.js';
 
 /**
  * Build a recording filename: {camera}_{ISO8601}.mp4
@@ -62,8 +63,12 @@ export function pruneOldClips(dir: string, retentionDays: number | null, now: Da
         unlinkSync(full);
         deleted.push(full);
       }
-    } catch {
-      // File vanished mid-sweep (e.g. a concurrent record finished/rotated). Skip.
+    } catch (err) {
+      // A file vanishing mid-sweep (ENOENT) is expected; surface anything else
+      // (permissions, I/O) so expired clips aren't silently left in place.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        log.warn(`Retention: could not process ${full}: ${(err as Error).message}`);
+      }
     }
   }
   return deleted;

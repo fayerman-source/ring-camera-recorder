@@ -11,6 +11,7 @@ export type RecordFn = (camera: RingCamera, cfg: AppConfig, seconds: number) => 
 interface CameraState {
   recording: boolean;
   lastStartMs: number;
+  motionActive: boolean;
 }
 
 /**
@@ -37,7 +38,7 @@ function shouldTrigger(state: CameraState, cfg: AppConfig, nowMs: number): boole
  * subscriptions so the caller can tear them down on shutdown.
  */
 export function watchCamera(camera: RingCamera, cfg: AppConfig, recordFn: RecordFn = recordClip): Subscription[] {
-  const state: CameraState = { recording: false, lastStartMs: 0 };
+  const state: CameraState = { recording: false, lastStartMs: 0, motionActive: false };
   const subs: Subscription[] = [];
 
   const trigger = (reason: string) => {
@@ -58,9 +59,12 @@ export function watchCamera(camera: RingCamera, cfg: AppConfig, recordFn: Record
 
   if (cfg.recordOnMotion) {
     subs.push(
-      // onMotionDetected emits a boolean; record on the rising edge (motion start).
+      // onMotionDetected emits a boolean. Trigger only on the rising edge
+      // (false -> true), so sustained motion that emits repeated `true`s does
+      // not queue extra clips once cooldown/no-overlap would otherwise allow it.
       camera.onMotionDetected.subscribe((active: boolean) => {
-        if (active) trigger('motion');
+        if (active && !state.motionActive) trigger('motion');
+        state.motionActive = active;
       }),
     );
   }

@@ -22,8 +22,8 @@ const execFileP = promisify(execFile);
  */
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const seconds = args.seconds ? Number(args.seconds) : 10;
-  const watchMotion = args['watch-motion'] ? Number(args['watch-motion']) : 0;
+  const seconds = numArg(args.seconds, 10, 1, '--seconds');
+  const watchMotion = numArg(args['watch-motion'], 0, 0, '--watch-motion');
   const cfg = loadConfig();
   const api = createRingApi(cfg);
 
@@ -137,6 +137,14 @@ function pickCamera(cameras: RingCamera[], sel?: string): RingCamera | undefined
     if (hit) return hit;
   }
   return cameras.find((c) => c.name.toLowerCase().includes(sel.toLowerCase()));
+}
+
+/** Parse a numeric CLI arg, rejecting non-numeric input instead of letting NaN flow into ffmpeg/timeout math. */
+function numArg(raw: string | undefined, fallback: number, min: number, flag: string): number {
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < min) throw new Error(`${flag} must be a number >= ${min} (got "${raw}")`);
+  return n;
 }
 
 function parseArgs(argv: string[]): Record<string, string> {
