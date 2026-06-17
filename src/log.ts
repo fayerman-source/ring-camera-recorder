@@ -12,7 +12,19 @@ function emit(level: Level, msg: string, extra?: unknown): void {
   const line = `${stamp} [${level.toUpperCase()}] ${msg}`;
   const stream = level === 'error' || level === 'warn' ? process.stderr : process.stdout;
   if (extra !== undefined) {
-    stream.write(`${line} ${typeof extra === 'string' ? extra : JSON.stringify(extra)}\n`);
+    let extraStr: string;
+    if (typeof extra === 'string') {
+      extraStr = extra;
+    } else {
+      try {
+        extraStr = JSON.stringify(extra);
+      } catch {
+        // Circular refs (some Error objects, API responses) must not crash the
+        // logger — it is frequently called from catch blocks.
+        extraStr = String(extra);
+      }
+    }
+    stream.write(`${line} ${extraStr}\n`);
   } else {
     stream.write(`${line}\n`);
   }

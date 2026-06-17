@@ -6,12 +6,14 @@ import { join } from 'node:path';
  *
  * The camera name is slugified so it is always filesystem-safe, and the
  * timestamp uses a colon-free ISO 8601 variant (colons are illegal on some
- * filesystems and awkward in shells). Example:
- *   FrontDoor_2026-06-17T14-03-22Z.mp4
+ * filesystems and awkward in shells). Milliseconds are kept so two recordings
+ * of the same camera started within the same second don't collide and overwrite
+ * each other. Example:
+ *   FrontDoor_2026-06-17T14-03-22-500Z.mp4
  */
 export function clipFilename(cameraName: string, when: Date): string {
   const slug = slugify(cameraName);
-  const ts = when.toISOString().replace(/\.\d{3}Z$/, 'Z').replace(/:/g, '-');
+  const ts = when.toISOString().replace(/[:.]/g, '-');
   return `${slug}_${ts}.mp4`;
 }
 
@@ -44,8 +46,11 @@ export function pruneOldClips(dir: string, retentionDays: number | null, now: Da
   let entries: string[];
   try {
     entries = readdirSync(dir);
-  } catch {
-    return []; // dir not created yet — nothing to prune
+  } catch (err) {
+    // Output dir not created yet is fine; surface real failures (permissions,
+    // I/O) instead of silently disabling retention.
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
   }
 
   for (const entry of entries) {

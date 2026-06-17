@@ -110,7 +110,11 @@ function waitForTriggeredRecording(camera: RingCamera, cfg: ReturnType<typeof lo
       clearTimeout(timer);
       resolve(val);
     };
+    let triggered = false;
     const onTrigger = (reason: string) => {
+      if (triggered) return; // record once; ignore further events for this camera
+      triggered = true;
+      subs.forEach((s) => s.unsubscribe()); // stop the event streams immediately
       log.info(`    → ${reason} detected; recording a clip to prove the trigger path…`);
       recordClip(camera, cfg, Math.min(cfg.clipLengthSeconds, 10))
         .then(() => finish(true))

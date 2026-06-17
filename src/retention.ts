@@ -13,9 +13,13 @@ export function startRetention(cfg: AppConfig): () => void {
   }
 
   const sweep = () => {
-    const deleted = pruneOldClips(cfg.outputDir, cfg.retentionDays, new Date());
-    if (deleted.length) {
-      log.info(`Retention: deleted ${deleted.length} clip(s) older than ${cfg.retentionDays}d.`);
+    try {
+      const deleted = pruneOldClips(cfg.outputDir, cfg.retentionDays, new Date());
+      if (deleted.length) {
+        log.info(`Retention: deleted ${deleted.length} clip(s) older than ${cfg.retentionDays}d.`);
+      }
+    } catch (err) {
+      log.warn(`Retention sweep failed: ${(err as Error).message}`);
     }
   };
 

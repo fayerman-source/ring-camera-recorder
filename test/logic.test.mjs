@@ -13,7 +13,7 @@ const ok = (c, m) => (c ? (pass++, console.log('  PASS', m)) : (fail++, console.
 console.log('files: naming + retention');
 {
   const name = clipFilename('Front Door!', new Date('2026-06-17T14:03:22.500Z'));
-  ok(/^Front-Door_2026-06-17T14-03-22Z\.mp4$/.test(name), 'filename matches {camera}_{ISO8601}.mp4, colons stripped');
+  ok(/^Front-Door_2026-06-17T14-03-22-500Z\.mp4$/.test(name), 'filename keeps ms, colons stripped (no same-second collision)');
   ok(slugify('   Backyard / Garage  ') === 'Backyard-Garage', 'slugify sanitizes unsafe chars');
   ok(slugify('***') === 'camera', 'slugify falls back to "camera" for empty result');
 

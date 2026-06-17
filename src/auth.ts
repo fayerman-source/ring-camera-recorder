@@ -30,11 +30,12 @@ async function main(): Promise<void> {
     try {
       await client.getAuth();
       ok = true;
-    } catch {
+    } catch (err) {
       // Expected when 2FA is enabled: the first getAuth triggers the code being
-      // sent and sets promptFor2fa with a human-readable instruction.
+      // sent and sets promptFor2fa with a human-readable instruction. Anything
+      // else (network, DNS, rate limit, bad credentials) should surface its cause.
       if (!client.promptFor2fa) {
-        throw new Error('Login failed (check email/password). Ring did not request a 2FA code.');
+        throw new Error(`Login failed (check email/password): ${(err as Error).message}`);
       }
       log.info(client.promptFor2fa);
       const code = (await question(rl, '2FA code: ')).trim();

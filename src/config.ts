@@ -76,7 +76,11 @@ export function loadConfig(): AppConfig {
   if (process.env.RING_TOKEN_PATH) merged.tokenPath = process.env.RING_TOKEN_PATH;
   if (process.env.RING_OUTPUT_DIR) merged.outputDir = process.env.RING_OUTPUT_DIR;
   if (process.env.RING_CLIP_SECONDS) merged.clipLengthSeconds = num(process.env.RING_CLIP_SECONDS, merged.clipLengthSeconds);
-  if (process.env.RING_RETENTION_DAYS) merged.retentionDays = num(process.env.RING_RETENTION_DAYS, 0) || null;
+  if (process.env.RING_RETENTION_DAYS) {
+    // Ignore non-numeric env input rather than silently disabling retention.
+    const parsed = Number(process.env.RING_RETENTION_DAYS);
+    if (Number.isFinite(parsed)) merged.retentionDays = parsed > 0 ? parsed : null;
+  }
 
   // Resolve paths to absolute so the rest of the app never guesses cwd.
   merged.tokenPath = resolveFromRoot(merged.tokenPath);
@@ -92,9 +96,14 @@ function num(v: string, fallback: number): number {
 }
 
 function validate(c: AppConfig): void {
-  if (c.clipLengthSeconds <= 0) throw new Error('clipLengthSeconds must be > 0');
-  if (c.motionCooldownSeconds < 0) throw new Error('motionCooldownSeconds must be >= 0');
-  if (c.retentionDays !== null && c.retentionDays < 0) throw new Error('retentionDays must be >= 0 or null');
+  if (!Number.isFinite(c.clipLengthSeconds) || c.clipLengthSeconds <= 0)
+    throw new Error('clipLengthSeconds must be a number > 0');
+  if (!Number.isFinite(c.motionCooldownSeconds) || c.motionCooldownSeconds < 0)
+    throw new Error('motionCooldownSeconds must be a number >= 0');
+  if (!Number.isFinite(c.retentionSweepMinutes) || c.retentionSweepMinutes <= 0)
+    throw new Error('retentionSweepMinutes must be a number > 0');
+  if (c.retentionDays !== null && (!Number.isFinite(c.retentionDays) || c.retentionDays < 0))
+    throw new Error('retentionDays must be a number >= 0 or null');
   if (c.cameras !== 'all' && !Array.isArray(c.cameras)) {
     throw new Error('cameras must be "all" or an array of names/ids');
   }

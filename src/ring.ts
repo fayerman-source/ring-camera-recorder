@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, chmodSync, mkdirSync, renameSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { RingApi, type RingCamera } from 'ring-client-api';
 import type { AppConfig } from './config.js';
 import { cameraSelected } from './config.js';
@@ -20,15 +21,30 @@ export function readToken(cfg: AppConfig): string {
       `No refresh token at ${cfg.tokenPath}. Run \`npm run auth\` first to log in.`,
     );
   }
-  const raw = JSON.parse(readFileSync(cfg.tokenPath, 'utf8')) as TokenFile;
-  if (!raw.refreshToken) throw new Error(`Token file ${cfg.tokenPath} is missing "refreshToken".`);
+  let raw: TokenFile;
+  try {
+    raw = JSON.parse(readFileSync(cfg.tokenPath, 'utf8')) as TokenFile;
+  } catch (err) {
+    throw new Error(
+      `Token file ${cfg.tokenPath} is unreadable or not valid JSON (${(err as Error).message}). Re-run \`npm run auth\`.`,
+    );
+  }
+  if (!raw || !raw.refreshToken) {
+    throw new Error(`Token file ${cfg.tokenPath} is missing "refreshToken". Re-run \`npm run auth\`.`);
+  }
   return raw.refreshToken;
 }
 
 /** Write the token with 0600 perms (it grants full account access). */
 export function writeToken(cfg: AppConfig, refreshToken: string): void {
   const body: TokenFile = { refreshToken, updatedAt: new Date().toISOString() };
-  writeFileSync(cfg.tokenPath, JSON.stringify(body, null, 2), { mode: 0o600 });
+  mkdirSync(dirname(cfg.tokenPath), { recursive: true });
+  // Write to a temp file then atomically rename, so an interruption (or a
+  // concurrent rotation) can't leave a truncated, unparseable token file that
+  // would break the next startup.
+  const tmp = `${cfg.tokenPath}.tmp`;
+  writeFileSync(tmp, JSON.stringify(body, null, 2), { mode: 0o600 });
+  renameSync(tmp, cfg.tokenPath);
   try {
     chmodSync(cfg.tokenPath, 0o600); // enforce perms even if the file pre-existed
   } catch {
