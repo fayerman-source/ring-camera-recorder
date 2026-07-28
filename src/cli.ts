@@ -1,5 +1,6 @@
-import { loadConfig } from './config.js';
-import { createRingApi } from './ring.js';
+import type { RingApi } from 'ring-client-api';
+import { loadConfig, type AppConfig } from './config.js';
+import { createRingApi, formatCameraList } from './ring.js';
 import { recordClip } from './recorder.js';
 import { log } from './log.js';
 
@@ -21,42 +22,46 @@ async function main(): Promise<void> {
 
   try {
     if (command === 'list') {
-      const cameras = await api.getCameras();
-      if (cameras.length === 0) {
-        log.warn('No cameras found on this account.');
-        return;
-      }
-      log.info(`Found ${cameras.length} camera(s):`);
-      for (const c of cameras) {
-        const kind = c.isDoorbot ? 'doorbell' : 'camera';
-        const battery = c.batteryLevel != null ? `${c.batteryLevel}%` : 'wired';
-        process.stdout.write(`  #${c.id}  ${c.name}  [${kind}, ${c.model}, battery: ${battery}]\n`);
-      }
-      return;
-    }
-
-    if (command === 'record') {
-      const args = parseArgs(rest);
-      const seconds = args.seconds ? Number(args.seconds) : cfg.clipLengthSeconds;
-      if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('--seconds must be a positive number');
-
-      const cameras = await api.getCameras();
-      const match = pickCamera(cameras, args.camera);
-      if (!match) {
-        throw new Error(
-          `No camera matched ${args.camera ? `"${args.camera}"` : '(none specified)'}. ` +
-            `Available: ${cameras.map((c) => `${c.name} (#${c.id})`).join(', ')}`,
-        );
-      }
-      const result = await recordClip(match, cfg, seconds);
-      log.info(`Done: ${result.path}`);
-      return;
+      await runList(api);
+    } else {
+      await runRecord(api, cfg, rest);
     }
   } finally {
     api.disconnect();
     // ffmpeg/WebRTC teardown can leave handles open briefly; exit cleanly.
     setTimeout(() => process.exit(process.exitCode ?? 0), 1500);
   }
+}
+
+async function runList(api: RingApi): Promise<void> {
+  const cameras = await api.getCameras();
+  if (cameras.length === 0) {
+    log.warn('No cameras found on this account.');
+    return;
+  }
+  log.info(`Found ${cameras.length} camera(s):`);
+  for (const c of cameras) {
+    const kind = c.isDoorbot ? 'doorbell' : 'camera';
+    const battery = c.batteryLevel != null ? `${c.batteryLevel}%` : 'wired';
+    process.stdout.write(`  #${c.id}  ${c.name}  [${kind}, ${c.model}, battery: ${battery}]\n`);
+  }
+}
+
+async function runRecord(api: RingApi, cfg: AppConfig, argv: string[]): Promise<void> {
+  const args = parseArgs(argv);
+  const seconds = args.seconds ? Number(args.seconds) : cfg.clipLengthSeconds;
+  if (!Number.isFinite(seconds) || seconds <= 0) throw new Error('--seconds must be a positive number');
+
+  const cameras = await api.getCameras();
+  const match = pickCamera(cameras, args.camera);
+  if (!match) {
+    const requested = args.camera ? `"${args.camera}"` : '(none specified)';
+    throw new Error(
+      `No camera matched ${requested}. Available: ${formatCameraList(cameras)}`,
+    );
+  }
+  const result = await recordClip(match, cfg, seconds);
+  log.info(`Done: ${result.path}`);
 }
 
 function parseArgs(argv: string[]): Record<string, string> {

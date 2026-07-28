@@ -1,7 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve, isAbsolute } from 'node:path';
+import { resolve, isAbsolute, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
