@@ -13,7 +13,9 @@ function emit(level: Level, msg: string, extra?: unknown): void {
   const stamp = new Date().toISOString();
   const line = `${stamp} [${level.toUpperCase()}] ${msg}`;
   const stream = level === 'error' || level === 'warn' ? process.stderr : process.stdout;
-  if (extra !== undefined) {
+  if (extra === undefined) {
+    stream.write(`${line}\n`);
+  } else {
     let extraStr: string;
     if (typeof extra === 'string') {
       extraStr = extra;
@@ -29,8 +31,6 @@ function emit(level: Level, msg: string, extra?: unknown): void {
       }
     }
     stream.write(`${line} ${extraStr}\n`);
-  } else {
-    stream.write(`${line}\n`);
   }
 }
 

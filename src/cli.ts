@@ -42,7 +42,7 @@ async function runList(api: RingApi): Promise<void> {
   log.info(`Found ${cameras.length} camera(s):`);
   for (const c of cameras) {
     const kind = c.isDoorbot ? 'doorbell' : 'camera';
-    const battery = c.batteryLevel != null ? `${c.batteryLevel}%` : 'wired';
+    const battery = c.batteryLevel == null ? 'wired' : `${c.batteryLevel}%`;
     process.stdout.write(`  #${c.id}  ${c.name}  [${kind}, ${c.model}, battery: ${battery}]\n`);
   }
 }

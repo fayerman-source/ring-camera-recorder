@@ -20,6 +20,11 @@ const execFileP = promisify(execFile);
  *   3. probe the clip for playable video (and report audio)
  *   4. (optional) wait for a real motion/ding event and confirm auto-recording
  */
+type Config = ReturnType<typeof loadConfig>;
+type Clip = Awaited<ReturnType<typeof recordClip>>;
+
+const step = (n: number, msg: string) => log.info(`[${n}] ${msg}`);
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const seconds = numArg(args.seconds, 10, 1, '--seconds');
@@ -28,59 +33,77 @@ async function main(): Promise<void> {
   const api = createRingApi(cfg);
 
   let failures = 0;
-  const step = (n: number, msg: string) => log.info(`[${n}] ${msg}`);
 
   try {
-    // 1. AUTH + LIST ---------------------------------------------------------
-    step(1, 'Authenticating and listing cameras…');
-    const cameras = await api.getCameras();
-    if (cameras.length === 0) throw new Error('Authenticated but found 0 cameras on the account.');
-    for (const c of cameras) {
-      const battery = c.batteryLevel != null ? `${c.batteryLevel}%` : 'wired';
-      log.info(`    #${c.id}  ${c.name}  [${c.isDoorbot ? 'doorbell' : 'camera'}, ${c.model}, ${battery}]`);
-    }
-    log.info(`    ✓ Auth OK, ${cameras.length} camera(s) listed.`);
-
+    const cameras = await stepAuthAndList(api);
     const target = pickCamera(cameras, args.camera);
     if (!target) throw new Error(`No camera matched "${args.camera}".`);
 
-    // 2. CAPTURE -------------------------------------------------------------
-    step(2, `Capturing a ${seconds}s live clip from "${target.name}"…`);
-    const clip = await recordClip(target, cfg, seconds);
-    log.info(`    ✓ Wrote ${clip.path} (${(clip.bytes / 1024 / 1024).toFixed(2)} MB).`);
-
-    // 3. PROBE ---------------------------------------------------------------
-    step(3, 'Probing the clip for playable streams…');
-    const streams = await probeStreams(clip.path);
-    const hasVideo = streams.includes('video');
-    const hasAudio = streams.includes('audio');
-    if (!hasVideo) {
-      failures++;
-      log.error('    ✗ No video stream found — clip is not playable.');
-    } else {
-      log.info('    ✓ Video stream present, clip is playable.');
-    }
-    if (hasAudio) log.info('    ✓ Audio stream present.');
-    else log.warn('    ! No audio stream (Ring audio can be off in the app, or omitted for this device).');
-
-    // 4. MOTION TRIGGER (optional) ------------------------------------------
-    if (watchMotion > 0) {
-      step(4, `Waiting up to ${watchMotion}s for a real motion/ding on "${target.name}" — trigger it now (walk in front / press the doorbell)…`);
-      const fired = await waitForTriggeredRecording(target, cfg, watchMotion);
-      if (fired) log.info('    ✓ Motion/ding fired and an auto-recording completed end-to-end.');
-      else {
-        failures++;
-        log.error(`    ✗ No motion/ding event within ${watchMotion}s. Re-run with a longer --watch-motion and trigger motion.`);
-      }
-    } else {
-      step(4, 'Skipping motion test (pass --watch-motion <seconds> and trigger motion to verify it live).');
-    }
+    const clip = await stepCapture(target, cfg, seconds);
+    failures += await stepProbe(clip);
+    failures += await stepWatchMotion(target, cfg, watchMotion);
 
     log.info(failures === 0 ? '\nVERIFY: all checks passed.' : `\nVERIFY: ${failures} check(s) failed.`);
   } finally {
     api.disconnect();
     setTimeout(() => process.exit(failures === 0 ? 0 : 1), 1500);
   }
+}
+
+/** 1. Authenticate and list the real cameras on the account. */
+async function stepAuthAndList(api: ReturnType<typeof createRingApi>): Promise<RingCamera[]> {
+  step(1, 'Authenticating and listing cameras…');
+  const cameras = await api.getCameras();
+  if (cameras.length === 0) throw new Error('Authenticated but found 0 cameras on the account.');
+  for (const c of cameras) {
+    const battery = c.batteryLevel == null ? 'wired' : `${c.batteryLevel}%`;
+    log.info(`    #${c.id}  ${c.name}  [${c.isDoorbot ? 'doorbell' : 'camera'}, ${c.model}, ${battery}]`);
+  }
+  log.info(`    ✓ Auth OK, ${cameras.length} camera(s) listed.`);
+  return cameras;
+}
+
+/** 2. Capture a live clip to disk. */
+async function stepCapture(target: RingCamera, cfg: Config, seconds: number): Promise<Clip> {
+  step(2, `Capturing a ${seconds}s live clip from "${target.name}"…`);
+  const clip = await recordClip(target, cfg, seconds);
+  log.info(`    ✓ Wrote ${clip.path} (${(clip.bytes / 1024 / 1024).toFixed(2)} MB).`);
+  return clip;
+}
+
+/** 3. Probe the clip for a playable video stream. Returns the failure count. */
+async function stepProbe(clip: Clip): Promise<number> {
+  step(3, 'Probing the clip for playable streams…');
+  const streams = await probeStreams(clip.path);
+  let failures = 0;
+
+  if (streams.includes('video')) {
+    log.info('    ✓ Video stream present, clip is playable.');
+  } else {
+    failures++;
+    log.error('    ✗ No video stream found — clip is not playable.');
+  }
+
+  if (streams.includes('audio')) log.info('    ✓ Audio stream present.');
+  else log.warn('    ! No audio stream (Ring audio can be off in the app, or omitted for this device).');
+
+  return failures;
+}
+
+/** 4. Optionally wait for a real motion/ding and confirm auto-recording. Returns the failure count. */
+async function stepWatchMotion(target: RingCamera, cfg: Config, watchMotion: number): Promise<number> {
+  if (watchMotion <= 0) {
+    step(4, 'Skipping motion test (pass --watch-motion <seconds> and trigger motion to verify it live).');
+    return 0;
+  }
+
+  step(4, `Waiting up to ${watchMotion}s for a real motion/ding on "${target.name}" — trigger it now (walk in front / press the doorbell)…`);
+  if (await waitForTriggeredRecording(target, cfg, watchMotion)) {
+    log.info('    ✓ Motion/ding fired and an auto-recording completed end-to-end.');
+    return 0;
+  }
+  log.error(`    ✗ No motion/ding event within ${watchMotion}s. Re-run with a longer --watch-motion and trigger motion.`);
+  return 1;
 }
 
 /** Return the list of codec_types ("video"/"audio") present in a media file. */
@@ -99,7 +122,7 @@ async function probeStreams(file: string): Promise<string[]> {
  * Subscribe to motion + ding for one camera; on the first event, record a short
  * clip and resolve true once it's on disk. Resolves false on timeout.
  */
-function waitForTriggeredRecording(camera: RingCamera, cfg: ReturnType<typeof loadConfig>, timeoutSec: number): Promise<boolean> {
+function waitForTriggeredRecording(camera: RingCamera, cfg: Config, timeoutSec: number): Promise<boolean> {
   return new Promise((resolve) => {
     const subs: Subscription[] = [];
     let done = false;
