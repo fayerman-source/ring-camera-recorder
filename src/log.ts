@@ -2,6 +2,8 @@
  * Minimal leveled logger. Writes a single line per event with an ISO timestamp
  * so output is greppable and friendly to `journalctl`/pm2 log capture.
  */
+import { inspect } from 'node:util';
+
 type Level = 'info' | 'warn' | 'error' | 'debug';
 
 const DEBUG = process.env.RING_DEBUG === '1' || process.env.RING_DEBUG === 'true';
@@ -11,7 +13,9 @@ function emit(level: Level, msg: string, extra?: unknown): void {
   const stamp = new Date().toISOString();
   const line = `${stamp} [${level.toUpperCase()}] ${msg}`;
   const stream = level === 'error' || level === 'warn' ? process.stderr : process.stdout;
-  if (extra !== undefined) {
+  if (extra === undefined) {
+    stream.write(`${line}\n`);
+  } else {
     let extraStr: string;
     if (typeof extra === 'string') {
       extraStr = extra;
@@ -20,13 +24,13 @@ function emit(level: Level, msg: string, extra?: unknown): void {
         extraStr = JSON.stringify(extra);
       } catch {
         // Circular refs (some Error objects, API responses) must not crash the
-        // logger — it is frequently called from catch blocks.
-        extraStr = String(extra);
+        // logger — it is frequently called from catch blocks. `inspect` handles
+        // cycles and, unlike String(), does not collapse objects to
+        // "[object Object]".
+        extraStr = inspect(extra, { depth: 3, breakLength: Infinity });
       }
     }
     stream.write(`${line} ${extraStr}\n`);
-  } else {
-    stream.write(`${line}\n`);
   }
 }
 

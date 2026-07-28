@@ -42,7 +42,7 @@ const cfg = (over = {}) => ({ clipLengthSeconds: 10, recordOnMotion: true, recor
 function spy() {
   const calls = []; let resolveLast;
   const fn = (camera, c, seconds) => { calls.push({ seconds }); return new Promise((res) => { resolveLast = () => res({ camera: camera.name, path: 'x', bytes: 1, seconds }); }); };
-  return { fn, calls, finish: () => resolveLast && resolveLast() };
+  return { fn, calls, finish: () => resolveLast?.() };
 }
 
 {

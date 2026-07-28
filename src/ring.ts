@@ -29,7 +29,7 @@ export function readToken(cfg: AppConfig): string {
       `Token file ${cfg.tokenPath} is unreadable or not valid JSON (${(err as Error).message}). Re-run \`npm run auth\`.`,
     );
   }
-  if (!raw || !raw.refreshToken) {
+  if (!raw?.refreshToken) {
     throw new Error(`Token file ${cfg.tokenPath} is missing "refreshToken". Re-run \`npm run auth\`.`);
   }
   return raw.refreshToken;
@@ -81,6 +81,12 @@ export function createRingApi(cfg: AppConfig): RingApi {
   return api;
 }
 
+/** Render cameras as `Name (#id), Other (#id)` for error and warning messages. */
+export function formatCameraList(cameras: readonly Pick<RingCamera, 'name' | 'id'>[]): string {
+  if (cameras.length === 0) return '(none)';
+  return cameras.map((c) => `${c.name} (#${c.id})`).join(', ');
+}
+
 /** Get cameras filtered by the config `cameras` selector. */
 export async function getSelectedCameras(api: RingApi, cfg: AppConfig): Promise<RingCamera[]> {
   const all = await api.getCameras();
@@ -88,7 +94,7 @@ export async function getSelectedCameras(api: RingApi, cfg: AppConfig): Promise<
   if (selected.length === 0) {
     log.warn(
       `No cameras matched the config filter ${JSON.stringify(cfg.cameras)}. ` +
-        `Found: ${all.map((c) => `${c.name} (#${c.id})`).join(', ') || '(none)'}`,
+        `Found: ${formatCameraList(all)}`,
     );
   }
   return selected;
