@@ -20,7 +20,7 @@
     "record": "tsx src/cli.ts record",
     "list": "tsx src/cli.ts list",
     "verify": "tsx src/verify.ts",
-    "test": "npm run build && node test/logic.test.mjs",
+    "test": "npm run build && node --test test/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

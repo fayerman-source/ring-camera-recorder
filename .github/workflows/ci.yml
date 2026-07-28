@@ -16,8 +16,16 @@ jobs:
           node-version: '22'
           cache: npm
 
+      # --ignore-scripts blocks dependency lifecycle scripts (a supply-chain
+      # foothold: any transitive dep can run arbitrary code at install time).
+      # Three deps ship install scripts — esbuild, ffmpeg-for-homebridge and
+      # protobufjs — and all three only fetch or build binaries that this job
+      # does not use: it type-checks and runs the hermetic tests, which touch
+      # neither ffmpeg nor tsx. Nothing is rebuilt on purpose. If a future test
+      # needs a real ffmpeg, rebuild that one package explicitly rather than
+      # dropping this flag.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Type-check / build
         run: npm run build
