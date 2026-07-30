@@ -33,6 +33,20 @@ export interface AppConfig {
   retentionDays: number | null;
   /** How often (minutes) to run the retention sweep while the service runs. */
   retentionSweepMinutes: number;
+  /**
+   * Save the snapshot Ring captured at detection time alongside each clip.
+   *
+   * Ring's motion push can carry a snapshot uuid for a still taken when motion
+   * was detected — seconds *before* a live stream can be negotiated. That still
+   * is the only view of the approach available without a Ring Protect
+   * subscription. Costs one REST fetch and does not wake the camera.
+   */
+  detectionSnapshots: boolean;
+  /**
+   * Append a per-capture latency record to `<outputDir>/timing.jsonl`.
+   * Used to measure the gap between Ring's detection and the first frame.
+   */
+  timingLog: boolean;
 }
 
 const DEFAULTS: AppConfig = {
@@ -45,6 +59,8 @@ const DEFAULTS: AppConfig = {
   motionCooldownSeconds: 20,
   retentionDays: null,
   retentionSweepMinutes: 60,
+  detectionSnapshots: true,
+  timingLog: true,
 };
 
 /** Resolve a possibly-relative path against the project root. */

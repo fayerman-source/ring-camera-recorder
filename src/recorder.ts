@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import type { RingCamera } from 'ring-client-api';
 import type { AppConfig } from './config.js';
 import { clipFilename, ensureDir } from './files.js';
+import type { CaptureTiming } from './detection.js';
 import { log } from './log.js';
 
 /**
@@ -30,6 +31,30 @@ export interface RecordResult {
   path: string;
   bytes: number;
   seconds: number;
+  /** Timestamps for latency accounting (see src/detection.ts). */
+  timing?: CaptureTiming;
+}
+
+/**
+ * Watch `path` until it has a non-zero size, resolving the moment it does.
+ *
+ * This measures time-to-first-bytes, not strictly time-to-first-frame: the
+ * fragmented-MP4 header is flushed just ahead of the first media fragment. The
+ * two are within a frame interval of each other, which is far below the
+ * multi-second latency being measured, so the simpler poll is worth it.
+ * Returns a stop() the caller must always invoke, or the interval leaks.
+ */
+function watchForFirstBytes(path: string): { firstByteAtMs: () => number | undefined; stop: () => void } {
+  let at: number | undefined;
+  const timer = setInterval(() => {
+    if (at !== undefined) return;
+    try {
+      if (statSync(path).size > 0) at = Date.now();
+    } catch {
+      // Not created yet — ENOENT is the normal case until ffmpeg opens it.
+    }
+  }, 25);
+  return { firstByteAtMs: () => at, stop: () => clearInterval(timer) };
 }
 
 /**
@@ -56,23 +81,33 @@ export async function recordClip(
   // call would otherwise hang forever, so cap the wait with a generous margin.
   const startTimeoutMs = 30_000;
   const hardTimeoutMs = (seconds + 30) * 1000;
-  // Cap the call setup too: streamVideo() performs WebRTC signaling that can hang
-  // on flaky networks or the unofficial API, and the onCallEnded timeout below
-  // only starts counting once the session object exists.
-  const session = await withTimeout(
-    camera.streamVideo({ output: clipOutputArgs(seconds, outPath) }),
-    startTimeoutMs,
-    `live stream for "${camera.name}" did not start within ${startTimeoutMs / 1000}s`,
-  );
+
+  const timing: CaptureTiming = { triggerAtMs: startedAt.getTime() };
+  const firstBytes = watchForFirstBytes(outPath);
+
   try {
-    await withTimeout(
-      firstValueFrom(session.onCallEnded),
-      hardTimeoutMs,
-      `live call for "${camera.name}" exceeded ${hardTimeoutMs / 1000}s`,
+    // Cap the call setup too: streamVideo() performs WebRTC signaling that can hang
+    // on flaky networks or the unofficial API, and the onCallEnded timeout below
+    // only starts counting once the session object exists.
+    const session = await withTimeout(
+      camera.streamVideo({ output: clipOutputArgs(seconds, outPath) }),
+      startTimeoutMs,
+      `live stream for "${camera.name}" did not start within ${startTimeoutMs / 1000}s`,
     );
-  } catch (err) {
-    session.stop(); // ensure the WebRTC session + ffmpeg are torn down on timeout
-    throw err;
+    timing.streamOpenAtMs = Date.now();
+    try {
+      await withTimeout(
+        firstValueFrom(session.onCallEnded),
+        hardTimeoutMs,
+        `live call for "${camera.name}" exceeded ${hardTimeoutMs / 1000}s`,
+      );
+    } catch (err) {
+      session.stop(); // ensure the WebRTC session + ffmpeg are torn down on timeout
+      throw err;
+    }
+  } finally {
+    timing.firstFrameAtMs = firstBytes.firstByteAtMs();
+    firstBytes.stop();
   }
 
   let bytes = 0;
@@ -89,7 +124,7 @@ export async function recordClip(
   }
 
   log.info(`Saved ${filename} (${(bytes / 1024 / 1024).toFixed(2)} MB)`);
-  return { camera: camera.name, path: outPath, bytes, seconds };
+  return { camera: camera.name, path: outPath, bytes, seconds, timing };
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {

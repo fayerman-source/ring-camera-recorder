@@ -7,5 +7,7 @@
   "recordOnDing": true,
   "motionCooldownSeconds": 20,
   "retentionDays": 14,
-  "retentionSweepMinutes": 60
+  "retentionSweepMinutes": 60,
+  "detectionSnapshots": true,
+  "timingLog": true
 }

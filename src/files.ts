@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { log } from './log.js';
 
@@ -33,6 +33,23 @@ export function slugify(name: string): string {
 export function ensureDir(dir: string): string {
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+/**
+ * Append one JSON object as a line to `file`.
+ *
+ * Returns false instead of throwing: this is diagnostic bookkeeping attached to
+ * a recording that already succeeded, so a full disk or a permissions problem
+ * must never turn a saved clip into a reported failure.
+ */
+export function appendJsonLine(file: string, record: unknown): boolean {
+  try {
+    appendFileSync(file, `${JSON.stringify(record)}\n`);
+    return true;
+  } catch (err) {
+    log.warn(`Could not append to ${file}: ${(err as Error).message}`);
+    return false;
+  }
 }
 
 /**
