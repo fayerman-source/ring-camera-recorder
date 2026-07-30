@@ -90,6 +90,8 @@ variables. See `config.example.json`. Key fields:
 | `motionCooldownSeconds` | `20` | Min gap between auto-recordings per camera. |
 | `retentionDays` | `null` | Delete clips older than N days. `null` = keep all. |
 | `retentionSweepMinutes` | `60` | How often retention runs while the service is up. |
+| `detectionSnapshots` | `true` | Save Ring's detection-time still next to each clip. |
+| `timingLog` | `true` | Append per-capture latency rows to `<outputDir>/timing.jsonl`. |
 
 Environment overrides: `RING_TOKEN_PATH`, `RING_OUTPUT_DIR`, `RING_CLIP_SECONDS`,
 `RING_RETENTION_DAYS`, `RING_DEBUG=1`.
@@ -103,9 +105,46 @@ default `shouldTrigger()` policy:
 - Enforces `motionCooldownSeconds` between the *start* of consecutive clips.
 
 If you want "extend while motion persists" instead of fixed-length clips, or a different
-cooldown, edit `shouldTrigger()`; it's deliberately isolated for that. One
-no-subscription caveat: a clip can only begin *after* the event arrives, so there's no
-pre-roll buffer (you lose the ~1-2s before the trigger).
+cooldown, edit `shouldTrigger()`; it's deliberately isolated for that.
+
+### Startup latency (no pre-roll)
+
+A clip can only begin *after* the event arrives, so there is no pre-roll buffer. The
+gap is larger than it sounds. Measured on a battery Spotlight Cam Plus, median over 10
+real motion events:
+
+| Segment | Typical | Whose latency |
+|---------|---------|---------------|
+| Ring detects motion → push arrives here | ~2.3s | Ring's |
+| Trigger → live stream negotiated | ~3.7-4.4s | Ring's (WebRTC signaling + camera wake) |
+| Stream open → first bytes on disk | ~2.5s | ffmpeg stream analysis |
+| **Ring detection → first frame** | **~8.5s** | |
+
+At walking pace that is roughly 12 m of approach that is never recorded, which is why
+subjects can appear to be *leaving* rather than arriving. Almost all of it is Ring-side
+and cannot be reduced from here.
+
+Two things help:
+
+- **`detectionSnapshots`** (on by default) saves the still Ring captured *at detection
+  time* as `<clip>.detection.jpg`. It predates the first video frame by the whole
+  window above, so it is the only view of the approach available without a Ring
+  Protect subscription. Costs one REST fetch and does not wake the camera. Ring's push
+  does not always carry one; when it doesn't, the clip is unaffected.
+- **Detect earlier rather than react faster.** Widening the camera's motion zone and
+  raising sensitivity moves the trigger earlier in someone's approach, so the same
+  latency lands while they are still walking toward the camera.
+
+`timingLog` (on by default) appends one row per capture to `<outputDir>/timing.jsonl`
+with each segment above, so a settings change can be measured instead of guessed:
+
+```json
+{"camera":"Front","clip":"Front_….mp4","detectionSnapshot":"Front_….detection.jpg",
+ "subtype":"motion","ringEventAt":"…","firstFrameAt":"…",
+ "pushDelaySec":2.27,"streamSetupSec":3.75,"firstFrameSec":2.45,"blindWindowSec":8.5}
+```
+
+`blindWindowSec` is the headline number: Ring's detection to the first frame on disk.
 
 ## Running as a background service
 
