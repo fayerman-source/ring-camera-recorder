@@ -3,7 +3,8 @@ import { promisify } from 'node:util';
 import type { Subscription } from 'rxjs';
 import type { RingCamera } from 'ring-client-api';
 import { loadConfig } from './config.js';
-import { createRingApi } from './ring.js';
+import { createRingApi, readToken } from './ring.js';
+import { pushTokenOf, waitForPushRegistration } from './push.js';
 import { recordClip } from './recorder.js';
 import { log } from './log.js';
 
@@ -30,6 +31,8 @@ async function main(): Promise<void> {
   const seconds = numArg(args.seconds, 10, 1, '--seconds');
   const watchMotion = numArg(args['watch-motion'], 0, 0, '--watch-motion');
   const cfg = loadConfig();
+  // First run after `npm run auth`: stay up until push credentials are registered.
+  const firstRunAfterAuth = !pushTokenOf(readToken(cfg));
   const api = createRingApi(cfg);
 
   let failures = 0;
@@ -44,6 +47,9 @@ async function main(): Promise<void> {
     failures += await stepWatchMotion(target, cfg, watchMotion);
 
     log.info(failures === 0 ? '\nVERIFY: all checks passed.' : `\nVERIFY: ${failures} check(s) failed.`);
+    if (firstRunAfterAuth && !(await waitForPushRegistration(api.onRefreshTokenUpdated))) {
+      log.warn('Push registration did not finish. Motion recording may not work until the service is restarted.');
+    }
   } finally {
     api.disconnect();
     setTimeout(() => process.exit(failures === 0 ? 0 : 1), 1500);

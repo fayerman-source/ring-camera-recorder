@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- Missed-event check. Every `missedEventCheckMinutes` (default 15), the service compares Ring's event history with the push notifications it received, and warns about motion or doorbell events that never arrived. Previously, push delivery could stop with no sign in the logs.
+
+### Fixed
+
+- Detection snapshots and latency numbers were never recorded for motion clips. ring-client-api emits the motion state change before the push behind it, so the trigger always looked for the push one step too early. The trigger now waits one microtask before pairing.
+- `list`, `record` and `verify` no longer break motion alerts when run first after `npm run auth`. They exited before ring-client-api had registered the new push token with Ring, and later processes never registered it again. They now wait for the registration before exiting.
+
 ## [0.2.0] - 2026-11-07
 
 ### Added

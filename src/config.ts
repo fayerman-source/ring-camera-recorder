@@ -47,6 +47,13 @@ export interface AppConfig {
    * Used to measure the gap between Ring's detection and the first frame.
    */
   timingLog: boolean;
+  /**
+   * Every N minutes, compare Ring's event history with the push notifications
+   * actually received and warn about events that never arrived. Catches the
+   * otherwise silent failure where Ring stops delivering pushes. 0 or null
+   * disables the check.
+   */
+  missedEventCheckMinutes: number | null;
 }
 
 const DEFAULTS: AppConfig = {
@@ -61,6 +68,7 @@ const DEFAULTS: AppConfig = {
   retentionSweepMinutes: 60,
   detectionSnapshots: true,
   timingLog: true,
+  missedEventCheckMinutes: 15,
 };
 
 /** Resolve a possibly-relative path against the project root. */
@@ -119,6 +127,11 @@ function validate(c: AppConfig): void {
     throw new Error('retentionSweepMinutes must be a number > 0');
   if (c.retentionDays !== null && (!Number.isFinite(c.retentionDays) || c.retentionDays < 0))
     throw new Error('retentionDays must be a number >= 0 or null');
+  if (
+    c.missedEventCheckMinutes !== null &&
+    (!Number.isFinite(c.missedEventCheckMinutes) || c.missedEventCheckMinutes < 0)
+  )
+    throw new Error('missedEventCheckMinutes must be a number >= 0 or null');
   if (c.cameras !== 'all' && !Array.isArray(c.cameras)) {
     throw new Error('cameras must be "all" or an array of names/ids');
   }

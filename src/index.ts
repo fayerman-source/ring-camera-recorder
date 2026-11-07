@@ -4,6 +4,7 @@ import { createRingApi, getSelectedCameras } from './ring.js';
 import { watchCamera } from './events.js';
 import { watchPushRegistration } from './push.js';
 import { startRetention } from './retention.js';
+import { startMissedEventCheck } from './missed.js';
 import { log } from './log.js';
 
 /**
@@ -34,12 +35,14 @@ async function main(): Promise<void> {
   }
 
   const stopRetention = startRetention(cfg);
+  const missedCheck = startMissedEventCheck(cameras, cfg);
   log.info(`Ready. Watching ${cameras.length} camera(s). Press Ctrl-C to stop.`);
 
   const shutdown = (signal: string) => {
     log.info(`Received ${signal}, shutting down.`);
     for (const s of subs) s.unsubscribe();
     push.stop();
+    missedCheck.stop();
     stopRetention();
     api.disconnect();
     // Give in-flight ffmpeg writes a moment to flush before exit.
