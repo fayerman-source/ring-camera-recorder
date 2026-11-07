@@ -2,6 +2,7 @@ import type { Subscription } from 'rxjs';
 import { loadConfig } from './config.js';
 import { createRingApi, getSelectedCameras } from './ring.js';
 import { watchCamera } from './events.js';
+import { watchPushRegistration } from './push.js';
 import { startRetention } from './retention.js';
 import { log } from './log.js';
 
@@ -15,12 +16,17 @@ async function main(): Promise<void> {
   log.info(`Output: ${cfg.outputDir} | clip: ${cfg.clipLengthSeconds}s | cameras: ${JSON.stringify(cfg.cameras)}`);
 
   const api = createRingApi(cfg);
+  // Subscribe before camera discovery: push registration starts during it and
+  // can finish before getCameras() resolves.
+  const push = watchPushRegistration(api.onRefreshTokenUpdated);
   const cameras = await getSelectedCameras(api, cfg);
 
   if (cameras.length === 0) {
     log.error('No cameras to watch. Check the `cameras` filter in config.json. Exiting.');
     process.exit(1);
   }
+
+  push.setCameras(cameras);
 
   const subs: Subscription[] = [];
   for (const camera of cameras) {
@@ -33,6 +39,7 @@ async function main(): Promise<void> {
   const shutdown = (signal: string) => {
     log.info(`Received ${signal}, shutting down.`);
     for (const s of subs) s.unsubscribe();
+    push.stop();
     stopRetention();
     api.disconnect();
     // Give in-flight ffmpeg writes a moment to flush before exit.
