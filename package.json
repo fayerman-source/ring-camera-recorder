@@ -1,6 +1,6 @@
 {
   "name": "ring-camera-recorder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Self-hosted tool to locally record the live view from Ring cameras you own. Captures the free live stream (not paid cloud storage), so it works without a Ring Protect subscription.",
   "license": "MIT",
