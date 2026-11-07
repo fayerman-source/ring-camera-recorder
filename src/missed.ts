@@ -91,30 +91,34 @@ export function startMissedEventCheck(
   let watermark = nowFn();
   let running = false;
 
+  const checkCamera = async (camera: RingCamera, from: number, to: number) => {
+    try {
+      const { events } = await camera.getEvents({ limit: 50 });
+      const missed = findMissedEvents(events, pushes.get(camera.id) ?? [], from, to);
+      if (missed.length === 0) {
+        log.debug(`Missed-event check: all Ring events on "${camera.name}" arrived as pushes.`);
+        return;
+      }
+      const latestMs = Math.max(...missed.map((e) => Date.parse(e.created_at)));
+      const one = missed.length === 1;
+      log.warn(
+        `Ring logged ${missed.length} ${one ? 'event' : 'events'} on "${camera.name}" ` +
+          `that never arrived as a push notification (latest ${new Date(latestMs).toISOString()}). ` +
+          `Nothing was recorded for ${one ? 'it' : 'them'}. See README "Troubleshooting: no motion clips".`,
+      );
+    } catch (err) {
+      log.warn(`Missed-event check could not read Ring's history for "${camera.name}": ${(err as Error).message}`);
+    }
+  };
+
   const sweep = async () => {
     if (running) return;
+    const to = nowFn() - PUSH_GRACE_MS;
+    if (to <= watermark) return;
     running = true;
     try {
-      const to = nowFn() - PUSH_GRACE_MS;
-      if (to <= watermark) return;
-      for (const camera of cameras) {
-        try {
-          const { events } = await camera.getEvents({ limit: 50 });
-          const missed = findMissedEvents(events, pushes.get(camera.id) ?? [], watermark, to);
-          if (missed.length > 0) {
-            const latest = missed.map((e) => e.created_at).sort().at(-1);
-            log.warn(
-              `Ring logged ${missed.length} ${missed.length === 1 ? 'event' : 'events'} on "${camera.name}" ` +
-                `that never arrived as a push notification (latest ${latest}). Nothing was recorded for ` +
-                `${missed.length === 1 ? 'it' : 'them'}. See README "Troubleshooting: no motion clips".`,
-            );
-          } else {
-            log.debug(`Missed-event check: all Ring events on "${camera.name}" arrived as pushes.`);
-          }
-        } catch (err) {
-          log.warn(`Missed-event check could not read Ring's history for "${camera.name}": ${(err as Error).message}`);
-        }
-      }
+      // checkCamera never rejects, so one camera's failure can't skip the others.
+      await Promise.all(cameras.map((camera) => checkCamera(camera, watermark, to)));
       watermark = to;
     } finally {
       running = false;
