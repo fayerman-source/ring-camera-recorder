@@ -141,3 +141,27 @@ describe('push: watchPushRegistration', () => {
     assert.equal(updates.size, 0);
   });
 });
+
+describe('push: waitForPushRegistration', () => {
+  test('resolves true once push credentials appear, after the settle delay', async () => {
+    const updates = fakeUpdates();
+    const { waitForPushRegistration } = await import('../dist/push.js');
+    let settled;
+    const p = waitForPushRegistration(updates, 1_000, DELAY).then((ok) => (settled = ok));
+
+    updates.emit({ oldRefreshToken: token('rt-0'), newRefreshToken: token('rt-1') });
+    await wait(DELAY * 2);
+    assert.equal(settled, undefined, 'a rotation without push credentials does not count');
+
+    updates.emit({ oldRefreshToken: token('rt-1'), newRefreshToken: token('rt-2', 'fcm-abc') });
+    assert.equal(await p, true);
+    assert.equal(updates.size, 0, 'unsubscribes when done');
+  });
+
+  test('resolves false on timeout', async () => {
+    const updates = fakeUpdates();
+    const { waitForPushRegistration } = await import('../dist/push.js');
+    assert.equal(await waitForPushRegistration(updates, DELAY, DELAY), false);
+    assert.equal(updates.size, 0);
+  });
+});

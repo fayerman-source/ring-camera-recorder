@@ -92,6 +92,7 @@ variables. See `config.example.json`. Key fields:
 | `retentionSweepMinutes` | `60` | How often retention runs while the service is up. |
 | `detectionSnapshots` | `true` | Save Ring's detection-time still next to each clip. |
 | `timingLog` | `true` | Append per-capture latency rows to `<outputDir>/timing.jsonl`. |
+| `missedEventCheckMinutes` | `15` | Compare Ring's event history with received pushes and warn about events that never arrived. `0`/`null` disables. |
 
 Environment overrides: `RING_TOKEN_PATH`, `RING_OUTPUT_DIR`, `RING_CLIP_SECONDS`,
 `RING_RETENTION_DAYS`, `RING_DEBUG=1`.
@@ -156,12 +157,17 @@ notifications to this tool. Work through these in order:
    every entry named `ring-client-api` or "Device name not found". Ring caps how many
    devices can register for pushes.
 2. **Log in again** with `npm run auth -- --force`.
-3. **Start the service first.** Run `npm start` before `npm run list` or
-   `npm run record`. The first process after a login registers the push token with
-   Ring, and those short commands can exit before the registration finishes.
+3. **Run any command.** The first process after a login registers the push token
+   with Ring. The service re-subscribes your cameras once that finishes, and the
+   short commands (`list`, `record`, `verify`) wait for it before exiting.
 
 The service logs `Push token registered with Ring; re-subscribed N camera(s)` when
-it picks up new push credentials. Port 5228 to `mtalk.google.com` must also be open.
+it picks up new push credentials.
+
+You don't have to notice this yourself. Every `missedEventCheckMinutes` the service
+compares Ring's event history with the pushes it actually received, and logs a
+warning like `Ring logged 3 events on "Front" that never arrived as a push
+notification` when they diverge. Port 5228 to `mtalk.google.com` must also be open.
 See the upstream
 [notification troubleshooting guide](https://github.com/dgreif/ring/wiki/Notification-Troubleshooting).
 

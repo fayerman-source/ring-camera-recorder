@@ -63,12 +63,21 @@ export function pickDetection(
   latest: DetectionContext | undefined,
   triggerAtMs: number,
   maxAgeMs: number,
+  futureSlackMs: number = PUSH_AFTER_TRIGGER_SLACK_MS,
 ): DetectionContext | undefined {
   if (!latest) return undefined;
   const age = triggerAtMs - latest.receivedAtMs;
-  if (age < 0 || age > maxAgeMs) return undefined;
+  if (age < -futureSlackMs || age > maxAgeMs) return undefined;
   return latest;
 }
+
+/**
+ * How far *after* the trigger a notification may be stamped and still belong
+ * to it. ring-client-api emits the motion state change before the push itself,
+ * in the same synchronous call, so the push behind a motion trigger is normally
+ * stamped 0-1 ms after the trigger. Anything later is a different event.
+ */
+export const PUSH_AFTER_TRIGGER_SLACK_MS = 250;
 
 /** Timestamps collected across one recording attempt (ms epoch). */
 export interface CaptureTiming {

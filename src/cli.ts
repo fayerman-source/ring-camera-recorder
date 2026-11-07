@@ -1,6 +1,7 @@
 import type { RingApi } from 'ring-client-api';
 import { loadConfig, type AppConfig } from './config.js';
-import { createRingApi, formatCameraList } from './ring.js';
+import { createRingApi, formatCameraList, readToken } from './ring.js';
+import { pushTokenOf, waitForPushRegistration } from './push.js';
 import { recordClip } from './recorder.js';
 import { log } from './log.js';
 
@@ -18,6 +19,9 @@ async function main(): Promise<void> {
   }
 
   const cfg = loadConfig();
+  // A token without push credentials means this is the first run after
+  // `npm run auth`; this process must stay up until they are registered.
+  const firstRunAfterAuth = !pushTokenOf(readToken(cfg));
   const api = createRingApi(cfg); // reads token; throws a friendly error if missing
 
   try {
@@ -26,10 +30,24 @@ async function main(): Promise<void> {
     } else {
       await runRecord(api, cfg, rest);
     }
+    if (firstRunAfterAuth) await finishPushRegistration(api);
   } finally {
     api.disconnect();
     // ffmpeg/WebRTC teardown can leave handles open briefly; exit cleanly.
     setTimeout(() => process.exit(process.exitCode ?? 0), 1500);
+  }
+}
+
+/** First run after a login: stay up until Ring has our push token. See waitForPushRegistration. */
+async function finishPushRegistration(api: RingApi): Promise<void> {
+  log.info('First run after login: finishing push notification registration before exit...');
+  if (await waitForPushRegistration(api.onRefreshTokenUpdated)) {
+    log.info('Push notifications registered.');
+  } else {
+    log.warn(
+      'Push registration did not finish. Motion recording may not work until the service is restarted. ' +
+        'See README "Troubleshooting: no motion clips".',
+    );
   }
 }
 

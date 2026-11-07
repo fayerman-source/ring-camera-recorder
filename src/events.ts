@@ -159,11 +159,20 @@ export function watchCamera(
     state.lastStartMs = now;
     log.info(`Trigger: ${reason} on "${camera.name}".`);
 
-    const detection = pickDetection(state.lastDetection, now, DETECTION_MAX_AGE_MS);
+    // ring-client-api emits the motion state change *before* the push itself
+    // (processPushNotification calls onActiveNotifications.next, then
+    // onNewNotification.next, synchronously). So when a motion trigger runs,
+    // the push behind it has not been stored yet. Pick the detection one
+    // microtask later, after that synchronous emit has finished.
+    const detectionReady = Promise.resolve().then(() =>
+      pickDetection(state.lastDetection, now, DETECTION_MAX_AGE_MS),
+    );
     // Fetch the detection snapshot in parallel with the recording, not after:
     // it is the earliest view of the event and Ring expires these, so waiting
     // out a 30s clip first risks losing the one frame showing the approach.
-    const snapshot = fetchDetectionSnapshot(camera, cfg, detection, snapshotFn);
+    const snapshot = detectionReady.then((detection) =>
+      fetchDetectionSnapshot(camera, cfg, detection, snapshotFn),
+    );
 
     // Wrap in Promise.resolve().then(...) so a *synchronous* throw in recordFn
     // still becomes a rejection (caught below) and can never leave state.recording
@@ -171,7 +180,7 @@ export function watchCamera(
     Promise.resolve()
       .then(() => recordFn(camera, cfg, cfg.clipLengthSeconds))
       .then(async (result) => {
-        await writeCaptureMetadata(cfg, result, detection, await snapshot, now);
+        await writeCaptureMetadata(cfg, result, await detectionReady, await snapshot, now);
       })
       .catch((err) => log.error(`Recording failed for "${camera.name}": ${(err as Error).message}`))
       .finally(() => {

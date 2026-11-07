@@ -129,3 +129,42 @@ export function watchPushRegistration(
     },
   };
 }
+
+/** How long a short-lived command waits for push registration before giving up. */
+export const PUSH_REGISTRATION_TIMEOUT_MS = 20_000;
+
+/**
+ * Wait until ring-client-api has stored push credentials, plus `settleMs` for
+ * the device PATCH that registers them with Ring. Resolves true on success,
+ * false on timeout.
+ *
+ * Short-lived commands (`list`, `record`, `verify`) need this when they are the
+ * first process after `npm run auth`. ring-client-api creates and registers the
+ * push credentials in the background during camera discovery. A command that
+ * exits first leaves the token holding credentials Ring never learned about,
+ * and every later process reuses them without registering again, so motion
+ * pushes silently never arrive.
+ */
+export function waitForPushRegistration(
+  updates: TokenUpdates,
+  timeoutMs: number = PUSH_REGISTRATION_TIMEOUT_MS,
+  settleMs: number = RESUBSCRIBE_DELAY_MS,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    let done = false;
+    let sub: { unsubscribe(): void } | undefined;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
+      sub?.unsubscribe();
+      resolve(ok);
+    };
+    const timeout = setTimeout(() => finish(false), timeoutMs);
+    sub = updates.subscribe(({ newRefreshToken }) => {
+      if (done || !pushTokenOf(newRefreshToken)) return;
+      clearTimeout(timeout);
+      setTimeout(() => finish(true), settleMs);
+    });
+  });
+}

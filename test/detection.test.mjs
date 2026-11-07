@@ -75,6 +75,10 @@ describe('detection: pickDetection', () => {
     assert.equal(pickDetection(ctx(5_000), 4_000, 15_000), undefined);
   });
 
+  test('accepts a push stamped a moment after the trigger (library emit order)', () => {
+    assert.ok(pickDetection(ctx(1_001), 1_000, 15_000));
+  });
+
   test('returns undefined when no notification was ever seen', () => {
     assert.equal(pickDetection(undefined, 1, 15_000), undefined);
   });
@@ -213,6 +217,28 @@ describe('detection: watchCamera wiring', () => {
     assert.equal(row.detectionSnapshot, 'Front_x.detection.jpg');
     assert.equal(row.blindWindowSec, 8.5);
     assert.equal(row.subtype, 'motion');
+  });
+
+  test('pairs the push when ring-client-api emits motion before the notification', async () => {
+    // Real library order (processPushNotification): onActiveNotifications ->
+    // onMotionDetected fires first, then onNewNotification, in one synchronous call.
+    const { dir, camera, cfg, recordFn } = setup();
+    const asked = [];
+    const snapshotFn = async (_cam, uuid) => {
+      asked.push(uuid);
+      return Buffer.from('jpeg-bytes');
+    };
+    watchCamera(camera, cfg, recordFn, snapshotFn);
+
+    camera.onMotionDetected.next(true);
+    camera.onNewNotification.next(push());
+    await tick();
+
+    assert.deepEqual(asked, ['snap-uuid-1'], 'fetched the uuid from the push that caused the trigger');
+    assert.ok(existsSync(join(dir, 'Front_x.detection.jpg')));
+    const row = JSON.parse(readFileSync(join(dir, 'timing.jsonl'), 'utf8').trim());
+    assert.equal(row.dingId, 'ding-1');
+    assert.equal(row.blindWindowSec, 8.5);
   });
 
   test('still records when the push carried no snapshot uuid', async () => {
